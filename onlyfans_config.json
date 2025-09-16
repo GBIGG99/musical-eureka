@@ -1,0 +1,49 @@
+{
+  "use_tor": true,
+  "max_threads": 2,
+  "rate_limit_delay": 8,
+  "max_retries": 3,
+  "platform_specific_dorks": {
+    "onlyfans": [
+      "\"onlyfans\" \"content creator\" config",
+      "\"onlyfans\" \"model\" database", 
+      "\"onlyfans\" \"subscription\" api",
+      "\"onlyfans\" \"OF\" credentials",
+      "\"onlyfans\" \"creator\" env",
+      "\"onlyfans\" AWS_ACCESS_KEY_ID",
+      "\"onlyfans\" S3_BUCKET",
+      "\"onlyfans\" cloudfront",
+      "\"onlyfans\" stripe_key",
+      "\"onlyfans\" payment_gateway",
+      "\"onlyfans\" SDK integration",
+      "\"onlyfans\" API wrapper",
+      "\"onlyfans\" developer token",
+      "\"onlyfans\" webhook secret",
+      "\"onlyfans\" internal dashboard",
+      "\"onlyfans\" admin portal",
+      "\"onlyfans\" moderation system",
+      "\"onlyfans\" OR \"only fans\" database",
+      "\"onlyfans\" OR \"OF\" password",
+      "\"onlyfans\" OR \"onlyfans.com\" key"
+    ]
+  },
+  "critical_patterns": {
+    "payment_processing": [
+      "stripe.*key",
+      "paypal.*client",
+      "payment.*gateway",
+      "credit.*card.*processor"
+    ],
+    "aws_infrastructure": [
+      "AKIA[0-9A-Z]{16}",
+      "s3\\.amazonaws\\.com",
+      "cloudfront\\.net",
+      "r2\\.cloudflarestorage\\.com"
+    ],
+    "api_credentials": [
+      "api.*key.*=.*['\\\"]([^'\\\"]+)['\\\"]",
+      "client.*secret.*=.*['\\\"]([^'\\\"]+)['\\\"]",
+      "token.*=.*['\\\"]([^'\\\"]+)['\\\"]"
+    ]
+  }
+}
