@@ -1,0 +1,115 @@
+name: SPECTRE-GIT Security Scanner
+
+on:
+  schedule:
+    # Run daily at midnight UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target organization name'
+        required: true
+        default: 'example'
+      domains:
+        description: 'Target domains (comma-separated)'
+        required: true
+        default: 'example.com'
+      scan_type:
+        description: 'Scan intensity level'
+        required: false
+        default: 'standard'
+        type: choice
+        options:
+          - stealth
+          - standard
+          - aggressive
+
+env:
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests cryptography
+
+    - name: Create default config
+      run: |
+        cat > config.json << 'EOL'
+        {
+          "use_tor": false,
+          "max_threads": 2,
+          "rate_limit_delay": 3,
+          "max_retries": 3,
+          "max_results_per_dork": 50,
+          "deep_scan_repos": false,
+          "critical_patterns": {
+            "api_keys": ["[a-zA-Z0-9_]{24,40}", "[a-zA-Z0-9_]{64,128}"],
+            "emails": ["[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"],
+            "aws_keys": ["AKIA[0-9A-Z]{16}", "aws_access_key_id"],
+            "database_urls": ["mysql://[^\\s]+", "postgresql://[^\\s]+", "mongodb://[^\\s]+"],
+            "private_keys": ["-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----"]
+          }
+        }
+        EOL
+
+    - name: Run SPECTRE-GIT scan
+      run: |
+        python spectre_git.py \
+          -t "${{ github.event.inputs.target }}" \
+          -d ${{ github.event.inputs.domains }} \
+          --threads 2 \
+          -o scan_results
+
+    - name: Upload results
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-scan-results
+        path: |
+          scan_results.json
+          scan_results.txt
+          scan_results.csv
+        retention-days: 7
+
+  dependency-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Audit dependencies
+      run: |
+        pip install safety
+        safety check --full-report
+
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Lint code
+      run: |
+        pip install flake8
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
