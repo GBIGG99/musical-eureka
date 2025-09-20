@@ -1,51 +1,108 @@
-# Sample workflow for building and deploying a Jekyll site to GitHub Pages
-name: Deploy Jekyll with GitHub Pages dependencies preinstalled
+name: SPECTRE-GIT Security Scanner
 
 on:
-  # Runs on pushes targeting the default branch
+  # Run on push to main branch
   push:
     branches: ["main"]
-
-  # Allows you to run this workflow manually from the Actions tab
+  
+  # Run manually from Actions tab
   workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target organization name'
+        required: true
+        default: 'example'
+      domains:
+        description: 'Target domains (comma-separated)'
+        required: true
+        default: 'example.com'
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
+env:
+  PYTHON_VERSION: '3.10'
 
 jobs:
-  # Build job
-  build:
+  security-scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      - name: Build with Jekyll
-        uses: actions/jekyll-build-pages@v1
-        with:
-          source: ./
-          destination: ./_site
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-  # Deployment job
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    - name: Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests cryptography
+
+    - name: Create default config
+      run: |
+        cat > config.json << 'EOL'
+        {
+          "use_tor": false,
+          "max_threads": 2,
+          "rate_limit_delay": 5,
+          "max_retries": 3,
+          "max_results_per_dork": 50,
+          "deep_scan_repos": false,
+          "critical_patterns": {
+            "api_keys": ["[a-zA-Z0-9_]{24,40}", "[a-zA-Z0-9_]{64,128}"],
+            "emails": ["[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"],
+            "aws_keys": ["AKIA[0-9A-Z]{16}", "aws_access_key_id"],
+            "database_urls": ["mysql://[^\\s]+", "postgresql://[^\\s]+", "mongodb://[^\\s]+"],
+            "private_keys": ["-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----"]
+          }
+        }
+        EOL
+
+    - name: Run SPECTRE-GIT scan
+      run: |
+        python spectre_git.py \
+          -t "${{ github.event.inputs.target || 'test' }}" \
+          -d ${{ github.event.inputs.domains || 'example.com' }} \
+          --threads 2 \
+          -o scan_results
+
+    - name: Upload results
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-scan-results
+        path: |
+          scan_results.json
+          scan_results.txt
+          scan_results.csv
+        retention-days: 7
+
+  dependency-scan:
     runs-on: ubuntu-latest
-    needs: build
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Audit dependencies
+      run: |
+        pip install safety
+        safety check --full-report
+
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Lint code
+      run: |
+        pip install flake8
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
