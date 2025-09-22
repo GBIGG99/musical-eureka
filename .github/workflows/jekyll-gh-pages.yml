@@ -1,5 +1,8 @@
 name: SPECTRE-GIT Security Scanner
 
+permissions:
+  contents: read
+
 on:
   # Run on push to main branch
   push:
